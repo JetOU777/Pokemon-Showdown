@@ -1,3 +1,4 @@
+
 'use strict';
 
 // Note: This is the list of formats
@@ -31,17 +32,27 @@ exports.Formats = [
 		name: "[Gen 7] OU",
 		desc: [
 			"&bullet; <a href=\"https://www.smogon.com/forums/threads/3608656/\">OU Metagame Discussion</a>",
-			"&bullet; <a href=\"https://www.smogon.com/forums/threads/3587177/\">OU Banlist</a>",
+			"&bullet; <a href=\"https://www.smogon.com/forums/threads/3587177/\">OU Banlist</a>",  
 			"&bullet; <a href=\"https://www.smogon.com/forums/threads/3590726/\">OU Viability Rankings</a>",
 			"&bullet; <a href=\"https://www.smogon.com/forums/threads/3606650/\">OU Sample Teams</a>",
 		],
 
 		mod: 'gen7',
+		searchShow: false,
 		ruleset: ['Pokemon', 'Standard', 'Team Preview'],
 		banlist: ['Uber', 'Power Construct', 'Shadow Tag', 'Baton Pass'],
 	},
 	{
-		name: "[Gen 7] Ubers",
+                name: "[Gen 7] OU (suspect test)",
+		desc: ["&bullet; <a href=\"http://www.smogon.com/forums/threads/np-sm-ou-suspect-process-round-5-i-cant-escape-myself.3613890/\">OU Suspect Discussion</a>"],
+			
+	        mod: 'gen7',
+                challengeShow: false,
+	        ruleset: ['[Gen 7] OU'],
+                banlist: ['Uber', 'Power Construct', 'Shadow Tag', 'Baton Pass', 'Arena Trap'],	
+	},
+	{  
+                name: "[Gen 7] Ubers",
 		desc: [
 			"&bullet; <a href=\"https://www.smogon.com/forums/threads/3587184/\">Ubers Metagame Discussion</a>",
 			"&bullet; <a href=\"https://www.smogon.com/forums/threads/3591388/\">Ubers Viability Rankings</a>",
