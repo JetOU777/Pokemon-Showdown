@@ -9,7 +9,10 @@
     "sucrase": "^3.13.0"
   },
   "optionalDependencies": {
+    "better-sqlite3": "^6.0.1",
     "cloud-env": "^0.2.3",
+    "db-migrate": "^0.11.10",
+    "db-migrate-sqlite3": "^0.4.0",
     "node-oom-heapdump": "^1.2.0",
     "node-static": "^0.7.11",
     "nodemailer": "^6.4.6",

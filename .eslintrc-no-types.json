@@ -14,7 +14,8 @@
     "tools/set-import/importer.js",
     "tools/set-import/sets",
     "server/global-variables.d.ts",
-    "sim/global-variables.d.ts"
+    "sim/global-variables.d.ts",
+    "databases/migrations/*.js"
  ],
   "env": {
     "es6": true,

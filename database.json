@@ -1,0 +1,9 @@
+{
+	"defaultEnv": "prod",
+	"prod": {
+		"driver": "sqlite3",
+		"filename": "databases/sqlite.db"
+	},
+	"sql-file": true,
+	"migrations-dir": "databases/migrations/"
+}
