@@ -9,6 +9,97 @@
 
 import {FS} from '../lib/fs';
 
+// eslint-disable-next-line @typescript-eslint/interface-name-prefix
+export interface IModlogWriter {
+	shared: boolean;
+	setup: () => void;
+	destroy: () => Promise<void> | void;
+	rename: (newID: RoomID) => Promise<boolean> | boolean;
+	write: (
+		action: string, actionTaker?: ID, userid?: ID, ac?: ID,
+		alts?: ID[], ip?: string, note?: string
+	) => Promise<void> | void;
+}
+
+class ModlogWriterFS implements IModlogWriter {
+	roomid: RoomID;
+	stream?: Streams.WriteStream | null;
+	shared: boolean;
+	constructor(roomid: RoomID) {
+		this.roomid = roomid;
+		this.stream = undefined;
+		this.shared = false;
+	}
+	setup() {
+		if (this.stream !== undefined) return;
+		if (!this.roomid.includes('-')) {
+			this.stream = FS(`logs/modlog/modlog_${this.roomid}.txt`).createAppendStream();
+			return;
+		}
+		const sharedStreamId = this.roomid.split('-')[0] as RoomID;
+		let writer = Roomlogs.sharedModlogs.get(sharedStreamId);
+		if (!writer) {
+			writer = new ModlogWriterFS(sharedStreamId);
+			writer.setup();
+			Roomlogs.sharedModlogs.set(sharedStreamId, writer);
+		}
+		this.stream = (writer as ModlogWriterFS).stream;
+		this.shared = true;
+	}
+	async destroy() {
+		if (!this.stream) return;
+		return this.stream.end();
+	}
+	async rename(newID: RoomID) {
+		const modlogPath = `logs/modlog`;
+		const modlogStreamExisted = this.stream !== null;
+		await this.destroy();
+
+		await Promise.all([
+			FS(modlogPath + `/modlog_${this.roomid}.txt`).exists(),
+			FS(modlogPath + `/modlog_${newID}.txt`).exists(),
+		]).then(([modlogExists, newModlogExists]) => {
+			return Promise.all([
+				modlogExists && !newModlogExists ?
+					FS(modlogPath + `/modlog_${this.roomid}.txt`).rename(modlogPath + `/modlog_${newID}.txt`) :
+					undefined,
+			]);
+		});
+
+		this.roomid = newID;
+
+		if (modlogStreamExisted) {
+			// set modlogStream to undefined (uninitialized) instead of null (disabled)
+			this.stream = undefined;
+			this.setup();
+		}
+		return true;
+	}
+	write(
+		action: string, actionTaker?: ID, userid?: ID, ac?: ID,
+		alts?: ID[], ip?: string, note?: string
+	) {
+		console.log(action, actionTaker, userid, ac, alts, ip, note);
+		if (!this.stream) return;
+		void this.stream.write(
+			`[${new Date().toJSON()}] (${this.roomid}) ${action}:${userid ? ' [' + userid + ']' : ''}${ac ? ' ac:[' + ac + ']' : ''}${alts ? ' alts:[' + alts + ']' : ''}${ip ? ' ip:[' + ip + ']' : ''}${actionTaker ? ' by: ' + actionTaker : ''}${note ? ': ' + note : ''}\n`
+		);
+	}
+}
+
+export class ModlogWriter {
+	static connect(type: Config['storage']['modlog'], roomid: RoomID) {
+		let writer;
+		if (type === 'txt') {
+			writer = new ModlogWriterFS(roomid);
+		} else {
+			Monitor.log("No recognizable modlog storage format given in `Config#storage#modlog` - defaulting to FS");
+			writer = new ModlogWriterFS(roomid);
+		}
+		writer.setup();
+		return writer;
+	}
+}
 /**
  * Most rooms have three logs:
  * - scrollback
@@ -52,13 +143,12 @@ export class Roomlog {
 	 * undefined = uninitialized,
 	 * null = disabled
 	 */
-	modlogStream?: Streams.WriteStream | null;
+	modlogWriter?: IModlogWriter | null;
 	/**
 	 * undefined = uninitialized,
 	 * null = disabled
 	 */
 	roomlogStream?: Streams.WriteStream | null;
-	sharedModlog: boolean;
 	roomlogFilename: string;
 	constructor(room: BasicChatRoom, options: {isMultichannel?: any, autoTruncate?: any, logTimes?: any} = {}) {
 		this.roomid = room.roomid;
@@ -70,15 +160,12 @@ export class Roomlog {
 		this.log = [];
 		this.broadcastBuffer = '';
 
-		this.modlogStream = undefined;
+		this.modlogWriter = undefined;
 		this.roomlogStream = undefined;
-
-		// modlog/roomlog state
-		this.sharedModlog = false;
 
 		this.roomlogFilename = '';
 
-		this.setupModlogStream();
+		this.setupModlog();
 		void this.setupRoomlogStream(true);
 	}
 	getScrollback(channel = 0) {
@@ -102,20 +189,9 @@ export class Roomlog {
 		}
 		return log.join('\n') + '\n';
 	}
-	setupModlogStream() {
-		if (this.modlogStream !== undefined) return;
-		if (!this.roomid.includes('-')) {
-			this.modlogStream = FS(`logs/modlog/modlog_${this.roomid}.txt`).createAppendStream();
-			return;
-		}
-		const sharedStreamId = this.roomid.split('-')[0];
-		let stream = Roomlogs.sharedModlogs.get(sharedStreamId);
-		if (!stream) {
-			stream = FS(`logs/modlog/modlog_${sharedStreamId}.txt`).createAppendStream();
-			Roomlogs.sharedModlogs.set(sharedStreamId, stream);
-		}
-		this.modlogStream = stream;
-		this.sharedModlog = true;
+	setupModlog() {
+		if (this.modlogWriter !== undefined) return;
+		this.modlogWriter = ModlogWriter.connect(Config.storage.modlog, this.roomid);
 	}
 	async setupRoomlogStream(sync = false) {
 		if (this.roomlogStream === null) return;
@@ -220,14 +296,17 @@ export class Roomlog {
 		message = message.replace(/<img[^>]* src="data:image\/png;base64,[^">]+"[^>]*>/g, '');
 		void this.roomlogStream.write(timestamp + message + '\n');
 	}
-	modlog(message: string) {
-		if (!this.modlogStream) return;
-		void this.modlogStream.write('[' + (new Date().toJSON()) + '] ' + message + '\n');
+	modlog(
+		action: string, actionTaker?: ID, userid?: ID, ac?: ID,
+		alts?: ID[], ip?: string, note?: string
+	) {
+		if (!this.modlogWriter) return;
+		void this.modlogWriter.write(action, actionTaker, userid, ac, alts, ip, note);
 	}
 	async rename(newID: RoomID): Promise<true> {
 		const modlogPath = `logs/modlog`;
 		const roomlogPath = `logs/chat`;
-		const modlogStreamExisted = this.modlogStream !== null;
+		const modlogStreamExisted = this.modlogWriter !== null;
 		const roomlogStreamExisted = this.roomlogStream !== null;
 		await this.destroy();
 		await Promise.all([
@@ -249,8 +328,8 @@ export class Roomlog {
 		Roomlogs.roomlogs.set(newID, this);
 		if (modlogStreamExisted) {
 			// set modlogStream to undefined (uninitialized) instead of null (disabled)
-			this.modlogStream = undefined;
-			this.setupModlogStream();
+			this.modlogWriter = undefined;
+			this.setupModlog();
 		}
 		if (roomlogStreamExisted) {
 			this.roomlogStream = undefined;
@@ -281,12 +360,12 @@ export class Roomlog {
 
 	destroy() {
 		const promises = [];
-		if (this.sharedModlog) {
-			this.modlogStream = null;
+		if (this.modlogWriter?.shared) {
+			this.modlogWriter = null;
 		}
-		if (this.modlogStream) {
-			promises.push(this.modlogStream.end());
-			this.modlogStream = null;
+		if (this.modlogWriter) {
+			promises.push(this.modlogWriter.destroy());
+			this.modlogWriter = null;
 		}
 		if (this.roomlogStream) {
 			promises.push(this.roomlogStream.end());
@@ -297,7 +376,7 @@ export class Roomlog {
 	}
 }
 
-const sharedModlogs = new Map<string, Streams.WriteStream>();
+const sharedModlogs = new Map<string, IModlogWriter>();
 
 const roomlogs = new Map<string, Roomlog>();
 

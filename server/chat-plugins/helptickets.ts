@@ -139,7 +139,8 @@ export class HelpTicket extends Rooms.RoomGame {
 			}
 			tickets[this.ticket.userid] = this.ticket;
 			writeTickets();
-			this.modnote(user, `${user.name} claimed this ticket.`);
+			this.room.addByUser(user, `${user.name} claimed this ticket.`);
+			this.room.modlog('TICKETCLAIM', user.id);
 			notifyStaff();
 		} else {
 			this.claimQueue.push(user.name);
@@ -156,11 +157,13 @@ export class HelpTicket extends Rooms.RoomGame {
 		if (toID(this.ticket.claimed) === user.id) {
 			if (this.claimQueue.length) {
 				this.ticket.claimed = this.claimQueue.shift() || null;
-				this.modnote(user, `This ticket is now claimed by ${this.ticket.claimed}.`);
+				this.room.addByUser(user, `This ticket is now claimed by ${this.ticket.claimed}.`);
+				this.room.modlog('TICKETCLAIM', user.id);
 			} else {
 				this.ticket.claimed = null;
 				this.lastUnclaimedStart = Date.now();
-				this.modnote(user, `This ticket is no longer claimed.`);
+				this.room.addByUser(user, `This ticket is no longer claimed.`);
+				this.room.modlog('TICKETUNCLAIM', user.id);
 				notifyStaff();
 			}
 			tickets[this.ticket.userid] = this.ticket;
@@ -199,15 +202,11 @@ export class HelpTicket extends Rooms.RoomGame {
 		if (!(user.id in this.playerTable)) return;
 		this.removePlayer(user);
 		if (!this.ticket.open) return;
-		this.modnote(user, `${user.name} is no longer interested in this ticket.`);
+		this.room.addByUser(user, `${user.name} is no longer interested in this ticket.`);
+		this.room.modlog('TICKETLEAVE', user.id);
 		if (this.playerCount - 1 > 0) return; // There are still users in the ticket room, dont close the ticket
 		this.close(user, !!(this.firstClaimTime));
 		return true;
-	}
-
-	modnote(user: User, text: string) {
-		this.room.addByUser(user, text);
-		this.room.modlog(`(${this.room.roomid}) ${text}`);
 	}
 
 	getPreview() {
@@ -234,7 +233,8 @@ export class HelpTicket extends Rooms.RoomGame {
 		this.ticket.open = false;
 		tickets[this.ticket.userid] = this.ticket;
 		writeTickets();
-		this.modnote(staff, `${staff.name} closed this ticket.`);
+		this.room.addByUser(staff, `${staff.name} closed this ticket.`);
+		this.room.modlog('TICKETCLOSE', staff.id);
 		notifyStaff();
 		this.room.pokeExpireTimer();
 		for (const ticketGameUser of Object.values(this.playerTable)) {
@@ -299,7 +299,8 @@ export class HelpTicket extends Rooms.RoomGame {
 
 	deleteTicket(staff: User) {
 		this.close(staff, 'deleted');
-		this.modnote(staff, `${staff.name} deleted this ticket.`);
+		this.room.addByUser(staff, `${staff.name} deleted this ticket.`);
+		this.room.modlog('TICKETDELETE', staff.id);
 		delete tickets[this.ticket.userid];
 		writeTickets();
 		notifyStaff();
@@ -1204,7 +1205,8 @@ export const commands: ChatCommands = {
 				helpRoom.game = new HelpTicket(helpRoom, ticket);
 			}
 			const ticketGame = helpRoom.getGame(HelpTicket)!;
-			ticketGame.modnote(user, `${user.name} opened a new ticket. Issue: ${ticket.type}`);
+			ticketGame.room.modlog('TICKETOPEN', user.id, undefined, undefined, undefined, undefined, `Issue: ${ticket.type}`);
+			ticketGame.room.addByUser(user, `${user.name} opened a new ticket. Issue: ${ticket.type}`);
 			this.parse(`/join help-${user.id}`);
 			if (!(user.id in ticketGame.playerTable)) {
 				// User was already in the room, manually add them to the "game" so they get a popup if they try to leave

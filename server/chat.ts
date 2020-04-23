@@ -656,23 +656,16 @@ export class CommandContext extends MessageContext {
 		this.roomlog(msg);
 	}
 	globalModlog(action: string, user: string | User | null, note: string) {
-		let buf = `(${this.room.roomid}) ${action}: `;
-		if (user) {
-			if (typeof user === 'string') {
-				buf += `[${user}]`;
-			} else {
-				const userid = user.getLastId();
-				buf += `[${userid}]`;
-				if (user.autoconfirmed && user.autoconfirmed !== userid) buf += ` ac:[${user.autoconfirmed}]`;
-				const alts = user.getAltUsers(false, true).slice(1).map(alt => alt.getLastId()).join('], [');
-				if (alts.length) buf += ` alts:[${alts}]`;
-				buf += ` [${user.latestIp}]`;
-			}
-		}
-		buf += note.replace(/\n/gm, ' ');
-
-		Rooms.global.modlog(buf);
-		if (this.room !== Rooms.global) this.room.modlog(buf);
+		const userid = user ? (typeof user === 'string' ? toID(user) : user.id) : undefined;
+		const ac = user && typeof user !== 'string' && user.autoconfirmed && user.autoconfirmed !== userid ?
+			user.autoconfirmed :
+			undefined;
+		const alts = user && typeof user !== 'string' ?
+			user.getAltUsers(false, true).slice(1).map(alt => alt.getLastId()) :
+			undefined;
+		const ip = user && typeof user !== 'string' ? user.latestIp : undefined;
+		Rooms.global.modlog(action, undefined, userid, ac, alts, ip, note);
+		if (this.room !== Rooms.global) this.room.modlog(action, undefined, userid, ac, alts, ip, note);
 	}
 	modlog(
 		action: string,
@@ -680,25 +673,15 @@ export class CommandContext extends MessageContext {
 		note: string | null = null,
 		options: Partial<{noalts: any, noip: any}> = {}
 	) {
-		let buf = `(${this.room.roomid}) ${action}: `;
-		if (user) {
-			if (typeof user === 'string') {
-				buf += `[${toID(user)}]`;
-			} else {
-				const userid = user.getLastId();
-				buf += `[${userid}]`;
-				if (!options.noalts) {
-					if (user.autoconfirmed && user.autoconfirmed !== userid) buf += ` ac:[${user.autoconfirmed}]`;
-					const alts = user.getAltUsers(false, true).slice(1).map(alt => alt.getLastId()).join('], [');
-					if (alts.length) buf += ` alts:[${alts}]`;
-				}
-				if (!options.noip) buf += ` [${user.latestIp}]`;
-			}
-		}
-		buf += ` by ${this.user.id}`;
-		if (note) buf += `: ${note.replace(/\n/gm, ' ')}`;
-
-		this.room.modlog(buf);
+		const userid = user ? (typeof user === 'string' ? toID(user) : user.id) : undefined;
+		const ac = user && typeof user !== 'string' && user.autoconfirmed && user.autoconfirmed !== userid ?
+			user.autoconfirmed :
+			undefined;
+		const alts = !options.noip && user && typeof user !== 'string' ?
+			user.getAltUsers(false, true).slice(1).map(alt => alt.getLastId()) :
+			undefined;
+		const ip = !options.noip && user && typeof user !== 'string' ? user.latestIp : undefined;
+		this.room.modlog(action, this.user.id, userid, ac, alts, ip, note || undefined);
 	}
 	roomlog(data: string) {
 		if (this.pmTarget) return;

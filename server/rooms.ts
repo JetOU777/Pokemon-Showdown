@@ -24,7 +24,7 @@ import {WriteStream} from '../lib/streams';
 import {GTSGiveaway, LotteryGiveaway, QuestionGiveaway} from './chat-plugins/wifi';
 import {PM as RoomBattlePM, RoomBattle, RoomBattlePlayer, RoomBattleTimer} from "./room-battle";
 import {RoomGame, RoomGamePlayer} from './room-game';
-import {Roomlogs} from './roomlogs';
+import {IModlogWriter, Roomlogs, ModlogWriter} from './roomlogs';
 import * as crypto from 'crypto';
 
 /*********************************************************
@@ -220,7 +220,12 @@ export abstract class BasicRoom {
 	 */
 	add(message: string): this { throw new Error(`should be implemented by subclass`); }
 	roomlog(message: string) { throw new Error(`should be implemented by subclass`); }
-	modlog(message: string) { throw new Error(`should be implemented by subclass`); }
+	modlog(
+		action: string, actionTaker?: ID, userid?: ID, ac?: ID,
+		alts?: ID[], ip?: string, note?: string
+	) {
+		throw new Error(`should be implemented by subclass`);
+	}
 	logEntry() { throw new Error(`room.logEntry has been renamed room.roomlog`); }
 	addLogMessage() { throw new Error(`room.addLogMessage has been renamed room.addByUser`); }
 	/**
@@ -452,7 +457,7 @@ export class GlobalRoom extends BasicRoom {
 	readonly ladderIpLog: WriteStream;
 	readonly users: UserTable;
 	readonly reportUserStatsInterval: NodeJS.Timeout;
-	readonly modlogStream: WriteStream;
+	modlogWriter: IModlogWriter;
 	lockdown: boolean | 'pre' | 'ddos';
 	battleCount: number;
 	lastReportedCrash: number;
@@ -523,8 +528,6 @@ export class GlobalRoom extends BasicRoom {
 			// of GlobalRoom can have.
 			this.ladderIpLog = new WriteStream({write() { return undefined; }});
 		}
-		// Create writestream for modlog
-		this.modlogStream = FS('logs/modlog/modlog_global.txt').createAppendStream();
 
 		this.reportUserStatsInterval = setInterval(
 			() => this.reportUserStats(),
@@ -549,10 +552,20 @@ export class GlobalRoom extends BasicRoom {
 		} catch (e) {}
 		this.lastBattle = Number(lastBattle) || 0;
 		this.lastWrittenBattle = this.lastBattle;
+
+		this.modlogWriter = null!;
+		void this.setupModlog();
 	}
 
-	modlog(message: string) {
-		void this.modlogStream.write('[' + (new Date().toJSON()) + '] ' + message + '\n');
+	async setupModlog() {
+		this.modlogWriter = await ModlogWriter.connect(Config.storage.modlog, 'global');
+	}
+
+	modlog(
+		action: string, actionTaker?: ID, userid?: ID, ac?: ID,
+		alts?: ID[], ip?: string, note?: string
+	) {
+		void this.modlogWriter.write(action, actionTaker, userid, ac, alts, ip, note);
 	}
 
 	writeChatRoomData() {
@@ -1148,8 +1161,11 @@ export class BasicChatRoom extends BasicRoom {
 		this.log.roomlog(message);
 		return this;
 	}
-	modlog(message: string) {
-		this.log.modlog(message);
+	modlog(
+		action: string, actionTaker?: ID, userid?: ID, ac?: ID,
+		alts?: ID[], ip?: string, note?: string
+	) {
+		this.log.modlog(action, actionTaker, userid, ac, alts, ip, note);
 		return this;
 	}
 	hideText(userids: ID[], lineCount = 0) {

@@ -97,6 +97,20 @@ exports.proxyip = false;
 exports.ofe = false;
 
 /**
+ * A map of persistent data -> storage impl
+ * @type {{modlog: 'txt' | 'sqlite'}}
+ */
+exports.storage = {
+	'modlog': 'sqlite',
+};
+
+/**
+ * The reader used for modlog if it is stored in text ifles
+ * @type {'fs' | 'ripgrep'}
+ */
+exports.modlogfsreader = 'fs';
+
+/**
  * Pokemon of the Day - put a pokemon's name here to make it Pokemon of the Day
  *   The PotD will always be in the #2 slot (not #1 so it won't be a lead)
  *   in every Random Battle team.

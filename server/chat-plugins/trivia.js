@@ -712,7 +712,7 @@ class Trivia extends Rooms.RoomGame {
 		const logbuf = this.getStaffEndMessage(winners, winner => winner.id);
 		this.room.sendMods(buf);
 		this.room.roomlog(buf);
-		this.room.modlog(`(${this.room.roomid}) ${logbuf}`);
+		this.room.modlog(undefined, undefined, undefined, undefined, undefined, undefined, logbuf);
 
 		writeTriviaData();
 		this.destroy();
