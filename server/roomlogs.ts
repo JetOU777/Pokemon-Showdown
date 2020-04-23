@@ -8,6 +8,7 @@
  */
 
 import {FS} from '../lib/fs';
+import Database = require('better-sqlite3');
 
 // eslint-disable-next-line @typescript-eslint/interface-name-prefix
 export interface IModlogWriter {
@@ -19,6 +20,42 @@ export interface IModlogWriter {
 		action: string, actionTaker?: ID, userid?: ID, ac?: ID,
 		alts?: ID[], ip?: string, note?: string
 	) => Promise<void> | void;
+}
+
+class ModlogWriterSQL implements IModlogWriter {
+	roomid: RoomID;
+	shared: boolean;
+	constructor(roomid: RoomID) {
+		this.roomid = roomid;
+		this.shared = false;
+	}
+	setup() {
+		if (!this.roomid.includes('-')) return;
+		const sharedStreamId = this.roomid.split('-')[0] as RoomID;
+		let writer = Roomlogs.sharedModlogs.get(sharedStreamId);
+		if (!writer) {
+			writer = new ModlogWriterSQL(sharedStreamId);
+			Roomlogs.sharedModlogs.set(sharedStreamId, writer);
+		}
+		this.shared = true;
+	}
+	destroy() {
+		return;
+	}
+	rename() { return Promise.resolve(true); }
+	write(
+		action: string, actionTaker?: ID, userid?: ID, ac?: ID,
+		alts?: ID[], ip?: string, note?: string
+	) {
+		const database = new Database('databases/sqlite.db');
+		const stmt = database.prepare(`
+			INSERT INTO modlog (timestamp, roomid, action, action_taker, userid, autoconfirmed_userid, alts, ip, note)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`);
+		const timestamp = Math.floor(Date.now() / 1000);
+		stmt.run(timestamp, this.roomid, action, actionTaker, userid, ac, alts?.join(','), ip, note);
+		database.close();
+	}
 }
 
 class ModlogWriterFS implements IModlogWriter {
@@ -92,6 +129,8 @@ export class ModlogWriter {
 		let writer;
 		if (type === 'txt') {
 			writer = new ModlogWriterFS(roomid);
+		} else if (type === 'sqlite') {
+			writer = new ModlogWriterSQL(roomid);
 		} else {
 			Monitor.log("No recognizable modlog storage format given in `Config#storage#modlog` - defaulting to FS");
 			writer = new ModlogWriterFS(roomid);
