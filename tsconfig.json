@@ -5,6 +5,7 @@
         "target": "esnext",
         "module": "commonjs",
         "moduleResolution": "node",
+        "esModuleInterop": true,
         "strict": true,
         "allowJs": true,
         "checkJs": true

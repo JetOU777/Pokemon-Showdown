@@ -557,8 +557,8 @@ export class GlobalRoom extends BasicRoom {
 		void this.setupModlog();
 	}
 
-	async setupModlog() {
-		this.modlogWriter = await ModlogWriter.connect(Config.storage.modlog, 'global');
+	setupModlog() {
+		this.modlogWriter = ModlogWriter.connect(Config.storage.modlog, 'global');
 	}
 
 	modlog(

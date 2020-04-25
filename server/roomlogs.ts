@@ -8,7 +8,7 @@
  */
 
 import {FS} from '../lib/fs';
-import Database = require('better-sqlite3');
+import Database from 'better-sqlite3';
 
 // eslint-disable-next-line @typescript-eslint/interface-name-prefix
 export interface IModlogWriter {
@@ -116,10 +116,9 @@ class ModlogWriterFS implements IModlogWriter {
 		action: string, actionTaker?: ID, userid?: ID, ac?: ID,
 		alts?: ID[], ip?: string, note?: string
 	) {
-		console.log(action, actionTaker, userid, ac, alts, ip, note);
 		if (!this.stream) return;
 		void this.stream.write(
-			`[${new Date().toJSON()}] (${this.roomid}) ${action}:${userid ? ' [' + userid + ']' : ''}${ac ? ' ac:[' + ac + ']' : ''}${alts ? ' alts:[' + alts + ']' : ''}${ip ? ' ip:[' + ip + ']' : ''}${actionTaker ? ' by: ' + actionTaker : ''}${note ? ': ' + note : ''}\n`
+			`[${new Date().toJSON()}] (${this.roomid}) ${action}:${userid ? ' [' + userid + ']' : ''}${ac ? ' ac:[' + ac + ']' : ''}${alts ? ' alts:[' + alts + ']' : ''}${ip ? ' ip:[' + ip + ']' : ''}${actionTaker ? ' by ' + actionTaker : ''}${note ? ': ' + note : ''}\n`
 		);
 	}
 }
