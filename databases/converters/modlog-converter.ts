@@ -18,8 +18,152 @@ interface Log {
 	note?: string;
 }
 
-function parseModlog(line: string, isGlobal: boolean = false): Log {
+function modernizeLog(line: string) {
+   // first we save and remove the timestamp and the roomname
+   let prefix = line.match(/\[.+?\] \(.+?\) /i)[0];
+   line = line.replace(prefix, '');
+   if (line.startsWith('(') && line.endsWith(')')) {
+	   line = line.slice(1, -1);
+	}
+   const parseBrk = (line: string, brkType: ['(' | '[', ')' | ']']) => {
+	   const brkOpnIdx = line.indexOf(brkType[0]);
+	   const brkClsIdx = line.indexOf(brkType[1]);
+	   return line.slice(brkOpnIdx + 1, brkClsIdx);
+	};
+	const toID = (text: any) => {
+		return "" + (text && typeof text === "string" ? text : "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+	}
+	const punishments = ['mute', 'unmute', 'warn', 'roomban', 'locked', 'globally banned', 'unlocked', 'globally unbanned']
+	if (punishments.some(punishment => line.startsWith(punishment.toUpperCase()))) {
+		// Handle punishments botched by sparkychild's script 
+		// The reasons are still in parenthesis
+	}
+	// Promotions / Demotions
+   if (line.includes('was promoted to ')) {
+	   const userid = parseBrk(line, ['[', ']']);
+	   line = line.slice(userid.length + 3);
+	   // Slice off 'was promoted to '
+	   line = line.slice(16);
+	   const rank = line.slice(0, line.indexOf(' by')).replace(/ /, '').toUpperCase();
+	   // Slice of rank + ' by '
+	   line = line.slice(rank.length + 5);
+	   const actionTaker = parseBrk(line, ['[', ']']);
+	   return prefix + `${rank}: [${userid}] by ${actionTaker}`;
+   }
+   if (line.includes('was demoted to ')) {
+		const userid = parseBrk(line, ['[', ']']);
+		line = line.slice(userid.length + 3);
+		// Slice off 'was demoted to '
+		line = line.slice(15);
+		const rank = line.slice(0, line.indexOf(' by')).replace(/ /, '').toUpperCase();
+		// Slice of rank + ' by '
+		line = line.slice(rank.length + 5);
+		const actionTaker = parseBrk(line, ['[', ']']);
+		return prefix + `${rank}: [${userid}] by ${actionTaker}: (demote)`;
+	}
+	if (line.includes('was appointed Room Owner by ')) {
+		const userid = parseBrk(line, ['[', ']']);
+		line = line.slice(userid.length + 3);
+		// Slice off 'was appointed Room Owner by '
+		line = line.slice(16);
+		const actionTaker = parseBrk(line, ['[', ']']);
+		return prefix + `ROOMOWNER: [${userid}] by ${actionTaker}`;
+	}
+	// Modchat / Modjoin
+	if (line.includes('set modchat to ')) {
+		const actionTaker = parseBrk(line, ['[', ']']);
+		line = line.slice(actionTaker.length + 3);
+		line = line.slice(15);
+		const rank = line;
+		return prefix + `MODCHAT: by ${actionTaker}: ${rank}`;
+	}
+	if (line.includes('set modjoin to')) {
+		const actionTakerName = line.slice(0, line.lastIndexOf(' set'));
+		line = line.slice(actionTakerName.length + 1);
+		// Slice of 'set modjoin to '
+		line = line.slice(15);
+		const rank = line.startsWith('sync') ? 'sync' : line;
+		if (rank === 'sync') {
+			return prefix + `MODJOIN SYNC: by ${toID(actionTakerName)}`;
+		} else {
+			return prefix + `MODJOIN: by ${toID(actionTakerName)}: ${rank}`;
+		}
+	}
+	// Modnotes
+	if (line.includes('notes: ')) {
+		const actionTaker = parseBrk(line, ['[', ']']);
+		line = line.slice(actionTaker.length + 3);
+		// Slice off 'notes: '
+		line = line.slice(7);
+		const note = line;
+		return prefix + `NOTE: by ${actionTaker}: ${note}`;
+	}
+	// Roomintro / Staffintros
+	if (line.includes('changed the roomintro')) {
+		const actionTaker = parseBrk(line, ['[', ']']);
+		return prefix + `ROOMINTRO: by ${actionTaker}`;
+	}
+	if (line.includes('changed the staffintro')) {
+		const actionTaker = parseBrk(line, ['[', ']']);
+		return prefix + `STAFFINTRO: by ${actionTaker}`;
+	}
+	if (line.includes('deleted the roomintro')) {
+		const actionTaker = parseBrk(line, ['[', ']']);
+		return prefix + `DELETEROOMINTRO: by ${actionTaker}`;
+	}
+	if (line.includes('delete the staffintro')) {
+		const actionTaker = parseBrk(line, ['[', ']']);
+		return prefix + `STAFFINTRODELETE: by ${actionTaker}`;
+	}
+	// Roomdesc
+	if (line.includes('changed the roomdesc to: ')) {
+		const actionTaker = parseBrk(line, ['[', ']']);
+		line = line.slice(actionTaker.length + 3);
+		line = line.slice(27, -2);
+		const newDesc = line;
+		return prefix + `ROOMDESC: by ${actionTaker}: to "${newDesc}"`;
+	}
+	// Declares
+	if (line.includes(' declared ')) {
+		const actionTakerName = line.slice(0, line.lastIndexOf(' declared'));
+		line = line.slice(actionTakerName.length + 1);
+		line = line.slice(9);
+		const declared = line;
+		return prefix + `DECLARE: by ${toID(actionTakerName)}: ${declared}`;
+	}
+	// Roomevents
+	if (line.includes(' added a roomevent titled "')) {
+		const actionTakerName = line.slice(0, line.lastIndexOf(' added a roomevent titled "'));
+		line = line.slice(actionTakerName.length + 1);
+		const eventName = line.slice(26, -2);
+		return prefix + `ROOMEVENT: by ${toID(actionTakerName)}: added "${eventName}"`;
+	}
+	if (line.includes(' removed a roomevent titled "')) {
+		const actionTakerName = line.slice(0, line.lastIndexOf(' removed a roomevent titled "'));
+		line = line.slice(actionTakerName.length + 1);
+		const eventName = line.slice(27, -2);
+		return prefix + `ROOMEVENT: by ${toID(actionTakerName)}: removed "${eventName}"`;
+	}
+	// Tournaments
+	// [2014-11-20T13:16:16.524Z] (tournaments) ([sirdonovan] created a tournament in randombattle format.)
+	// [2018-01-18T14:30:02.564Z] (tournaments) TOUR CREATE: by ladymonita: gen7randombattle
+	if (line.includes('created a tournament in')) {
+		const actionTaker = parseBrk(line, ['[', ']']);
+		line = line.slice(actionTaker.length + 3);
+		line = line.slice(24, -8);
+		const format = line;
+		return prefix + `TOUR CREATE: by ${actionTaker}: ${format}`;
+	}
+	// TODO: [2014-11-20T15:38:15.635Z] (tournaments) ([scotw002] was disqualified from the tournament by Lilly Ƹ̵̡Ӝ̵̨̄Ʒ)
+	// Handle in pusnishments maybe?
+	
+	// [2015-01-05T21:40:40.599Z] (tournaments) (The tournament auto disqualify timeout was set to 2 by TOURN-E)
+	// ...	
+}
+
+function parseModlog(line: string, isGlobal = false): Log {
 	if (!line) return;
+	line = modernizeLog(line);
 	const parseBrk = (line: string, brkType: ['(' | '[', ')' | ']']) => {
 		const brkOpnIdx = line.indexOf(brkType[0]);
 		const brkClsIdx = line.indexOf(brkType[1]);

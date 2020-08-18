@@ -93,6 +93,23 @@ class SortedLimitedLengthList {
  * Modlog Functions
  *********************************************************/
 
+class ModlogReaderTxt {
+	getFileList() {
+		let fileNameList: string[] = [];
+		let checkAllRooms = false;
+		for (const roomid of roomidList) {
+			if (roomid === 'all') {
+				checkAllRooms = true;
+				const fileList = await FS(LOG_PATH).readdir();
+				for (const file of fileList) {
+					if (file !== 'README.md' && file !== 'modlog_global.txt') fileNameList.push(file);
+				}
+			} else {
+				fileNameList.push(`modlog_${roomid}.txt`);
+			}
+		}
+	}
+}
 function checkRipgrepAvailability() {
 	if (Config.ripgrepmodlog === undefined) {
 		Config.ripgrepmodlog = (async () => {
